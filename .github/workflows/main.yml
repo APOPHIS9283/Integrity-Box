@@ -1,0 +1,70 @@
+name: Build Integrity-Box Module
+
+on:
+  push:
+    branches:
+      - main
+      - master
+    tags:
+      - 'v*'
+  pull_request:
+    branches:
+      - main
+      - master
+  workflow_dispatch:
+
+jobs:
+  build:
+    name: Package Module ZIP
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Extract Version Info
+        id: version
+        run: |
+          if [ -f "module.prop" ]; then
+            VERSION=$(grep "^version=" module.prop | cut -d'=' -f2 | tr -d ' \r')
+          fi
+          
+          # Fallback versioning if module.prop version is missing
+          if [ -z "$VERSION" ]; then
+            VERSION="v$(date +'%Y.%m.%d')"
+          fi
+
+          ZIP_NAME="Integrity-Box-${VERSION}.zip"
+          echo "ZIP_NAME=${ZIP_NAME}" >> $GITHUB_ENV
+          echo "VERSION=${VERSION}" >> $GITHUB_ENV
+          echo "Building module version: ${VERSION}"
+
+      - name: Build Flashable ZIP
+        run: |
+          # Package module content into a flashable ZIP file
+          # Exclude non-module repository files
+          zip -r "${ZIP_NAME}" . -x \
+            ".git*" \
+            ".github/*" \
+            "*.md" \
+            "LICENSE" \
+            ".gitignore" \
+            ".editorconfig"
+
+      - name: Upload Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ env.ZIP_NAME }}
+          path: ${{ env.ZIP_NAME }}
+          if-no-files-found: error
+
+      - name: Create GitHub Release
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: ${{ env.ZIP_NAME }}
+          name: Integrity-Box ${{ env.VERSION }}
+          draft: false
+          prerelease: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
